@@ -43,7 +43,15 @@ func (c *Command) GetArgAsInteger(position int) (value int64, err error) {
 	if len(c.Args)-1 < position {
 		return 0, fmt.Errorf("Missing arguments.")
 	}
-	return strconv.ParseInt(c.Args[position], 10, 32)
+
+	if value, err = strconv.ParseInt(c.Args[position], 10, 32); err != nil {
+		re := regexp.MustCompile(`^<tel:([0-9]+)\|[0-9]+>$`)
+		parsed := re.FindStringSubmatch(c.Args[position])
+		if len(parsed) == 2 {
+			return strconv.ParseInt(parsed[1], 10, 32)
+		}
+	}
+	return value, err
 }
 
 func (c *Command) GetArgAsString(position int) (value string, err error) {
@@ -72,7 +80,15 @@ func (c *Command) GetArgAsFloat(position int) (value float64, err error) {
 	if len(c.Args)-1 < position {
 		return 0, fmt.Errorf("Missing arguments.")
 	}
-	return strconv.ParseFloat(c.Args[position], 64)
+
+	if value, err = strconv.ParseFloat(c.Args[position], 64); err != nil {
+		re := regexp.MustCompile(`^\$?([0-9]+\.?[0-9]{1,2}?)$`)
+		parsed := re.FindStringSubmatch(c.Args[position])
+		if len(parsed) == 2 {
+			return strconv.ParseFloat(parsed[1], 64)
+		}
+	}
+	return value, err
 }
 
 func (c *Command) GetOptionalUserFromArg(position int) (user *User) {
@@ -116,7 +132,7 @@ func (c *Command) CommandHelp() {
 	case "orders":
 		response = "*!orders {@username}*\nSee your limit orders. Optionally specify a target user to see their pending limit orders. You can use `!o` as a shorthand alias to this command."
 	case "limit":
-		response = "*!limit [type] [quantity] [symbol] [price target]*\nCreate a limit order of the specified type (buy/sell) for the specified amount of shares. When the price target is met, then your order will be executed. Limit orders are good until cancelled."
+		response = "*!limit [type] [quantity] [symbol] [price target]*\nCreate a limit order of the specified type (buy/sell/cover) for the specified amount of shares. When the price target is met, then your order will be executed. Limit orders are good until cancelled."
 	case "cancel":
 		response = "*!cancel [type] [quantity] [symbol] [price target]*\nCancel a limit order placed - arguments must match a limit order you previously created."
 	case "liquidate":

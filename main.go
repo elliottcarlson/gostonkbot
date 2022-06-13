@@ -36,7 +36,7 @@ func main() {
 		Redis.ForEach(func(user User) {
 			source := Command{
 				Event: &slackevents.MessageEvent{
-					Channel: "C03J4S61WGN", //user.UserID, # Defaulting to #stockmarket_bot_test
+					Channel: os.Getenv("SLACK_DEFAULT_CHANNEL"),
 				},
 				User: &user,
 			}

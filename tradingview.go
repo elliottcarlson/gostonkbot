@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
+	"github.com/slack-go/slack"
 )
 
 type TradingView struct {
@@ -79,6 +79,7 @@ func (tv *TradingView) Connect() {
 	tv.Send("quote_set_fields", []interface{}{tv.SessionID, "listed_exchange",
 		"ch", "chp", "rtc", "rch", "rchp", "lp", "is_tradable",
 		"short_name", "description", "currency_code", "current_session",
+		"status", "type", "update_mode", "fundamentals",
 	})
 
 	tv.IsConnected = true
@@ -128,6 +129,17 @@ func (tv *TradingView) Loop() {
 
 		if err != nil {
 			log.Debug("read:", err)
+			slackapi.PostMessage(
+				"U2PANET2T",
+				slack.MsgOptionBlocks(
+					slack.NewSectionBlock(
+						slack.NewTextBlockObject(slack.MarkdownType, "Lost connection to TradingView; quitting.", false, false),
+						nil,
+						nil,
+					),
+				),
+			)
+			panic("Lost connection; panic to restart")
 			return
 		}
 
@@ -223,10 +235,10 @@ func ParseTradingViewEvent(line string) error {
 			return fmt.Errorf("Error parsing quote data: %v", err)
 		}
 
-		spew.Dump(qsd)
-
+		log.Infof("QSD line %v", line)
 		watchlist.Update(envelope.Symbol, qsd)
 	default:
+		log.Infof("Unknown TV payload: %v", line)
 		return nil
 	}
 

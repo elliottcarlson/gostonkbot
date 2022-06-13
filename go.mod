@@ -3,7 +3,6 @@ module sublim.nl/stonkbot
 go 1.17
 
 require (
-	github.com/davecgh/go-spew v1.1.1
 	github.com/dematron/go-tvscanner v0.0.0-20210304194119-a1190286f75f
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-redis/redis/v8 v8.11.5
