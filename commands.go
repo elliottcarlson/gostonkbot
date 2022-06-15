@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -209,8 +210,8 @@ func (c *Command) CommandPortfolio() {
 		portfolio = append(portfolio,
 			fmt.Sprintf("%5s | %8s | %8d | %12s | %12s | %12s | %12s",
 				asset.Type, asset.Symbol, asset.Quantity,
-				format.Sprintf("$%.2f", asset.CostBasis),
-				format.Sprintf("$%.2f", quote.LastPrice),
+				format.Sprintf("$%.4f", asset.CostBasis),
+				format.Sprintf("$%.4f", quote.LastPrice),
 				format.Sprintf("$%.2f", value),
 				format.Sprintf("$%+.2f", net),
 			),
@@ -245,13 +246,38 @@ func (c *Command) CommandBuy() {
 	var quantity int64
 	var symbol string
 
-	if quantity, err = c.GetArgAsInteger(0); err != nil {
-		c.Say(invalid_arg, "quantity")
+	if symbol, err = c.GetArgAsStockSymbol(1); err != nil {
+		c.Say(invalid_arg, "stock symbol")
 		return
 	}
 
-	if symbol, err = c.GetArgAsStockSymbol(1); err != nil {
-		c.Say(invalid_arg, "stock symbol")
+	if quantity, err = c.GetArgAsInteger(0); err != nil {
+		value, err := c.GetArgAsString(0)
+		if err != nil {
+			c.Say(invalid_arg, "quantity")
+			return
+		}
+
+		if strings.ToLower(value) != "max" {
+			c.Say(invalid_arg, "quantity")
+			return
+		}
+
+		funds := c.User.Funds
+		fmt.Println("???")
+		watchlist.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+			cost_basis := quote.LastPrice
+			if quote.LivePrice != 0.00 && (quote.CurrentSession == "pre_market" || quote.CurrentSession == "post_market") {
+				cost_basis = quote.LivePrice
+			}
+
+			quantity = int64(math.Floor(funds / cost_basis))
+
+			fmt.Printf("Funds: %f, Cost: %f, quantity: %d\n", funds, cost_basis, quantity)
+
+			c.User.CreatePosition("long", symbol, quantity, 0.0, c)
+			return true
+		})
 		return
 	}
 
@@ -386,8 +412,8 @@ func (c *Command) CommandOrders() {
 		portfolio = append(portfolio,
 			fmt.Sprintf("%11s | %8s | %8d | %14s | %12s",
 				asset.Type, asset.Symbol, asset.Quantity,
-				format.Sprintf("$%.2f", asset.CostBasis),
-				format.Sprintf("$%.2f", quote.LastPrice),
+				format.Sprintf("$%.4f", asset.CostBasis),
+				format.Sprintf("$%.4f", quote.LastPrice),
 			),
 		)
 		positions = positions + 1

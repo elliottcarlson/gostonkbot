@@ -27,19 +27,19 @@ func StockQuoteBlock(quote TradingViewQuote) slack.MsgOption {
 			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("%s (%s:%s)", quote.FullName, quote.Symbol, quote.Exchange), false, false),
 		),
 		slack.NewHeaderBlock(
-			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("$%.2f      %s %+.2f (%+.2f%%)", quote.LastPrice, emoji, quote.Change, quote.ChangePercentage), true, false),
+			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("$%.4f      %s %+.2f (%+.2f%%)", quote.LastPrice, emoji, quote.Change, quote.ChangePercentage), true, false),
 		),
 	}
 
 	switch quote.CurrentSession {
 	case "pre_market":
 		fields = append(fields, slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Pre-Market: $%.2f %s %+.2f (%+.2f%%)", quote.LivePrice, live_emoji, quote.LiveChange, quote.LiveChangePercentage), true, false),
+			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Pre-Market: $%.4f %s %+.2f (%+.2f%%)", quote.LivePrice, live_emoji, quote.LiveChange, quote.LiveChangePercentage), true, false),
 			nil, nil,
 		))
 	case "post_market":
 		fields = append(fields, slack.NewSectionBlock(
-			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Post-Market: $%.2f %s %+.2f (%+.2f%%)", quote.LivePrice, live_emoji, quote.LiveChange, quote.LiveChangePercentage), true, false),
+			slack.NewTextBlockObject(slack.PlainTextType, fmt.Sprintf("Post-Market: $%.4f %s %+.2f (%+.2f%%)", quote.LivePrice, live_emoji, quote.LiveChange, quote.LiveChangePercentage), true, false),
 			nil, nil,
 		))
 	}
