@@ -45,6 +45,8 @@ type TradingViewQuote struct {
 	CurrencyCode         string  `json:"currency_code"`
 	IsTradable           bool    `json:"is_tradable"`
 	Exchange             string  `json:"listed_exchange"`
+	OriginalName	     string  `json:"original_name"`
+	ProName		     string  `json:"pro_name"`
 	CurrentSession       string  `json:"current_session"`
 	LastPrice            float64 `json:"lp"`
 	Change               float64 `json:"ch"`

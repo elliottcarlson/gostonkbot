@@ -79,7 +79,8 @@ func (tv *TradingView) Connect() {
 	tv.Send("quote_set_fields", []interface{}{tv.SessionID, "listed_exchange",
 		"ch", "chp", "rtc", "rch", "rchp", "lp", "is_tradable",
 		"short_name", "description", "currency_code", "current_session",
-		"status", "type", "update_mode", "fundamentals",
+		"status", "type", "update_mode", "fundamentals", "pro_name",
+		"original_name",
 	})
 
 	tv.IsConnected = true
@@ -225,8 +226,15 @@ func ParseTradingViewEvent(line string) error {
 			return err
 		}
 
+		symbol := envelope.Symbol
+		re := regexp.MustCompile(`([A-Z]+)$`)
+		parsed := re.FindStringSubmatch(symbol)
+		if len(parsed) == 2 {
+			symbol = parsed[0]
+		}
+
 		var qsd TradingViewQuote
-		if quote, ok := watchlist.GetCurrent(envelope.Symbol); ok {
+		if quote, ok := watchlist.GetCurrent(symbol); ok {
 			qsd = quote
 		}
 
@@ -236,7 +244,22 @@ func ParseTradingViewEvent(line string) error {
 		}
 
 		log.Infof("QSD line %v", line)
-		watchlist.Update(envelope.Symbol, qsd)
+
+		if qsd.OriginalName != "" {
+			if _, ok := watchlist.Watching[qsd.OriginalName]; !ok {
+				fmt.Printf("Adding %s to watch list as alternate.\n", qsd.OriginalName)
+				tradingview.Watch(qsd.OriginalName)
+			}
+		}
+
+		if qsd.ProName != "" {
+			if _, ok := watchlist.Watching[qsd.ProName]; !ok {
+				fmt.Printf("Adding %s to watch list as alternate.\n", qsd.ProName)
+				tradingview.Watch(qsd.ProName)
+			}
+		}
+
+		watchlist.Update(symbol, qsd)
 	default:
 		log.Infof("Unknown TV payload: %v", line)
 		return nil
