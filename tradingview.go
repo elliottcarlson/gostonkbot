@@ -1,3 +1,7 @@
+/*
+Package go-tradingview provides an interface to watch and action on updates of Stock symbols
+via the TradingView WebSocket interface.
+*/
 package main
 
 import (
@@ -12,50 +16,34 @@ import (
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"github.com/slack-go/slack"
 )
 
-type TradingView struct {
-	Conn           *websocket.Conn
-	Dialer         *websocket.Dialer
-	Url            string
-	RequestHeader  http.Header
-	OnConnected    func(tv TradingView)
-	OnConnectError func(err error, tv TradingView)
-	OnDisconnected func(err error, tv TradingView)
-	OnUpdate       func(state TradingViewQuote)
-	OnEvent        func(event *TradingViewEvent)
-	IsConnected    bool
-	SessionID      string
-	Timeout        time.Duration
-	sendMutex      *sync.Mutex
-	recvMutex      *sync.Mutex
-}
-
+// Return a new instance of a TradingView.
 func NewTradingView() TradingView {
 	return TradingView{
-		Url: "wss://data.tradingview.com/socket.io/websocket",
-		RequestHeader: http.Header{
+		url: "wss://data.tradingview.com/socket.io/websocket",
+		requestHeader: http.Header{
 			"Origin": []string{
 				"https://data.tradingview.com/",
 			},
 		},
-		Dialer:    &websocket.Dialer{},
-		Timeout:   0,
+		dialer:    &websocket.Dialer{},
 		sendMutex: &sync.Mutex{},
 		recvMutex: &sync.Mutex{},
+		Watching:  make(map[string]TradingViewQuote),
 	}
 }
 
+// Connect the current instance of TradingView to the TradingView WebSocket.
 func (tv *TradingView) Connect() {
 	var err error
 	var resp *http.Response
 
-	tv.Dialer.TLSClientConfig = &tls.Config{
+	tv.dialer.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
 
-	tv.Conn, resp, err = tv.Dialer.Dial(tv.Url, tv.RequestHeader)
+	tv.conn, resp, err = tv.dialer.Dial(tv.url, tv.requestHeader)
 
 	if err != nil {
 		log.Errorf("Error while connecting to TradingView: %v", err)
@@ -71,12 +59,12 @@ func (tv *TradingView) Connect() {
 
 	log.Info("Connected to TradingView")
 
-	tv.SessionID = CreateSessionID("qs_")
+	tv.sessionID = createSessionID("qs_")
 
-	tv.Send("set_data_quality", []interface{}{"low"})
-	tv.Send("set_auth_token", []interface{}{"unauthorized_user_token"})
-	tv.Send("quote_create_session", []interface{}{tv.SessionID})
-	tv.Send("quote_set_fields", []interface{}{tv.SessionID, "listed_exchange",
+	tv.send("set_data_quality", []interface{}{"low"})
+	tv.send("set_auth_token", []interface{}{"unauthorized_user_token"})
+	tv.send("quote_create_session", []interface{}{tv.sessionID})
+	tv.send("quote_set_fields", []interface{}{tv.sessionID, "listed_exchange",
 		"ch", "chp", "rtc", "rch", "rchp", "lp", "is_tradable",
 		"short_name", "description", "currency_code", "current_session",
 		"status", "type", "update_mode", "fundamentals", "pro_name",
@@ -88,121 +76,58 @@ func (tv *TradingView) Connect() {
 		tv.OnConnected(*tv)
 	}
 
-	defaultCloseHandler := tv.Conn.CloseHandler()
-	tv.Conn.SetCloseHandler(func(code int, text string) error {
+	defaultCloseHandler := tv.conn.CloseHandler()
+	tv.conn.SetCloseHandler(func(code int, text string) error {
 		result := defaultCloseHandler(code, text)
 		log.Info("Disconnected from server", result)
+		if tv.OnDisconnected != nil {
+			tv.OnDisconnected(result, *tv)
+		}
 		return result
 	})
 
-	go tv.Loop()
+	go tv.loop()
 }
 
-func (tv *TradingView) Watch(symbol string) {
-	if _, ok := watchlist.Watching[symbol]; ok {
-		return
-	} else {
-		watchlist.Watching[symbol] = TradingViewQuote{}
-	}
-
-	if tv.IsConnected {
-		tv.Send("quote_add_symbols", []interface{}{
-			tv.SessionID,
-			symbol,
-			map[string][]string{
-				"flags": {
-					"force_permission",
-				},
-			},
-		})
-		tv.Send("quote_fast_symbols", []interface{}{
-			tv.SessionID,
-			symbol,
-		})
-	}
-}
-
-func (tv *TradingView) Loop() {
+func (tv *TradingView) loop() {
 	for {
 		tv.recvMutex.Lock()
-		_, message, err := tv.Conn.ReadMessage()
+		_, message, err := tv.conn.ReadMessage()
 		tv.recvMutex.Unlock()
 
 		if err != nil {
-			log.Debug("read:", err)
-			slackapi.PostMessage(
-				"U2PANET2T",
-				slack.MsgOptionBlocks(
-					slack.NewSectionBlock(
-						slack.NewTextBlockObject(slack.MarkdownType, "Lost connection to TradingView; quitting.", false, false),
-						nil,
-						nil,
-					),
-				),
-			)
-			panic("Lost connection; panic to restart")
+			if tv.OnDisconnected != nil {
+				tv.OnDisconnected(err, *tv)
+			} else {
+				panic("Lost connection; panic to restart")
+			}
 		}
 
-		tv.MessageHandler(string(message))
+		tv.messageHandler(string(message))
 	}
 }
 
-func (tv *TradingView) MessageHandler(message string) {
+func (tv *TradingView) messageHandler(message string) {
 	re := regexp.MustCompile("~m~[0-9]+~m~")
 	lines := re.Split(message, -1)
 
 	for i := range lines {
 		if lines[i] != "" {
 			if matched := re.MatchString(lines[i]); matched {
-				tv.SendSigned(lines[i])
+				tv.sendSigned(lines[i])
 				continue
 			}
 
-			if err := ParseTradingViewEvent(lines[i]); err != nil {
+			if err := tv.parseTradingViewEvent(lines[i]); err != nil {
 				log.Errorf("Error parsing incoming message: %v", err)
 			}
 		}
 	}
 }
 
-func (tv *TradingView) Send(method string, params []interface{}) {
-	data := TradingViewRequest{
-		Method: method,
-		Params: params,
-	}
-
-	message, err := json.Marshal(data)
-
-	if err != nil {
-		log.Errorf("Error creating Signed Message: %v", err)
-		return
-	}
-
-	tv.SendSigned(string(message))
-}
-
-func (tv *TradingView) SendSigned(message string) {
-	message = fmt.Sprintf("~m~%d~m~%s", len(message), message)
-
-	err := tv.SendRaw(message)
-	if err != nil {
-		log.Errorf("Error sending message: %v", err)
-		return
-	}
-}
-
-func (tv *TradingView) SendRaw(message string) error {
-	tv.sendMutex.Lock()
-	err := tv.Conn.WriteMessage(websocket.TextMessage, []byte(message))
-	tv.sendMutex.Unlock()
-	return err
-}
-
-func ParseTradingViewEvent(line string) error {
-	var err error
-
+func (tv *TradingView) parseTradingViewEvent(message string) (err error) {
 	event := &TradingViewEvent{}
-	err = json.Unmarshal([]byte(line), event)
+	err = json.Unmarshal([]byte(message), event)
 	if err != nil {
 		return err
 	}
@@ -233,7 +158,7 @@ func ParseTradingViewEvent(line string) error {
 		}
 
 		var qsd TradingViewQuote
-		if quote, ok := watchlist.GetCurrent(symbol); ok {
+		if quote, ok := tv.GetCurrent(symbol); ok {
 			qsd = quote
 		}
 
@@ -242,30 +167,156 @@ func ParseTradingViewEvent(line string) error {
 			return fmt.Errorf("error parsing quote data: %v", err)
 		}
 
-		log.Infof("QSD line %v", line)
+		log.Debugf("QSD line %v", message)
 
 		if qsd.OriginalName != "" {
-			if _, ok := watchlist.Watching[qsd.OriginalName]; !ok {
-				tradingview.Watch(qsd.OriginalName)
+			if _, ok := tv.Watching[qsd.OriginalName]; !ok {
+				tv.Watch(qsd.OriginalName)
 			}
 		}
 
 		if qsd.ProName != "" {
-			if _, ok := watchlist.Watching[qsd.ProName]; !ok {
-				tradingview.Watch(qsd.ProName)
+			if _, ok := tv.Watching[qsd.ProName]; !ok {
+				tv.Watch(qsd.ProName)
 			}
 		}
 
-		watchlist.Update(symbol, qsd)
+		tv.update(symbol, qsd)
 	default:
-		log.Infof("Unknown TV payload: %v", line)
+		log.Infof("Unknown TV payload: %v", message)
 		return nil
 	}
 
 	return nil
 }
 
-func CreateSessionID(prefix string) string {
+func (tv *TradingView) update(symbol string, quote TradingViewQuote) {
+	tv.Watching[symbol] = quote
+
+	temp := tv.notifications[:0]
+	for i := range tv.notifications {
+		notification := tv.notifications[i]
+
+		if notification.Symbol == symbol {
+			shouldDelete := notification.Action(quote)
+
+			if shouldDelete {
+				continue
+			}
+		}
+
+		temp = append(temp, notification)
+	}
+
+	tv.notifications = temp
+}
+
+func (tv *TradingView) send(method string, params []interface{}) {
+	data := TradingViewRequest{
+		Method: method,
+		Params: params,
+	}
+
+	message, err := json.Marshal(data)
+
+	if err != nil {
+		log.Errorf("Error creating Signed Message: %v", err)
+		return
+	}
+
+	tv.sendSigned(string(message))
+}
+
+func (tv *TradingView) sendSigned(message string) {
+	message = fmt.Sprintf("~m~%d~m~%s", len(message), message)
+
+	err := tv.sendRaw(message)
+	if err != nil {
+		log.Errorf("Error sending message: %v", err)
+		return
+	}
+}
+
+func (tv *TradingView) sendRaw(message string) error {
+	tv.sendMutex.Lock()
+	err := tv.conn.WriteMessage(websocket.TextMessage, []byte(message))
+	tv.sendMutex.Unlock()
+	return err
+}
+
+// Add the specified symbol to the TradingView watch list.
+func (tv *TradingView) Watch(symbol string) {
+	if _, ok := tv.Watching[symbol]; ok {
+		return
+	} else {
+		tv.Watching[symbol] = TradingViewQuote{}
+	}
+
+	if tv.IsConnected {
+		tv.send("quote_add_symbols", []interface{}{
+			tv.sessionID,
+			symbol,
+			map[string][]string{
+				"flags": {
+					"force_permission",
+				},
+			},
+		})
+		tv.send("quote_fast_symbols", []interface{}{
+			tv.sessionID,
+			symbol,
+		})
+	}
+}
+
+// Retrieve the specified symbols quote, with a callback for when the quote resolves.
+// If the symbol is already being watched, it will call the provided callback with the
+// last cached version of the symbol. If the symbol is not being watched yet, it will
+// If the symbol is not in the existing watch list, it will add it, and queue up a
+// response to the callback once it has a quote to provide.
+// The callback should expect a TradingViewQuote struct containing the latest quote,
+// and should return a boolean specifying if it should continue to listen.
+func (tv *TradingView) GetQuote(symbol string, callback func(TradingViewQuote) (shouldDelete bool)) {
+	if _, ok := tv.Watching[symbol]; ok {
+		callback(tv.Watching[symbol])
+		return
+	}
+
+	tv.OnUpdate(symbol, callback)
+}
+
+// Retrieve the most recent quote for the specified symbol.
+// If the symbol is already being watched, it will return the latest quote available,
+// and a true value to indicate this request was successful.
+// If the symbol is not watched, it will return an empty TradingViewQuote struct, and
+// a false value to indicate the quote is not being watched.
+func (tv *TradingView) GetCurrent(symbol string) (quote TradingViewQuote, ok bool) {
+	if _, ok := tv.Watching[symbol]; ok {
+		return tv.Watching[symbol], true
+	}
+
+	return TradingViewQuote{}, false
+}
+
+// Create a notification request for all updates to the specified symbol which will
+// call the specified callback for each update event. The callback should expect a
+// TradingViewQuote struct containing the quote that triggered this call. The callback
+// should return a boolean specifying if it should continue to notify this callback
+// on updates of the symbol.
+func (tv *TradingView) OnUpdate(symbol string, callback func(TradingViewQuote) (shouldDelete bool)) {
+	if _, ok := tv.Watching[symbol]; !ok {
+		tv.Watch(symbol)
+	}
+
+	notification := &TradingViewNotifications{
+		Symbol: symbol,
+		Action: callback,
+	}
+
+	tv.notifications = append(tv.notifications, notification)
+}
+
+func createSessionID(prefix string) string {
 	rand.Seed(time.Now().UnixNano())
 	var runes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 	b := make([]rune, 12)

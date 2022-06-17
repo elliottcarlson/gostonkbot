@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"sync"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/gorilla/websocket"
 )
 
 type RedisClient struct {
@@ -18,6 +20,27 @@ type RedisClient struct {
 type RedisConfig struct {
 	RedisURL string
 	Prefix   string
+}
+
+type TradingView struct {
+	conn           *websocket.Conn
+	dialer         *websocket.Dialer
+	url            string
+	requestHeader  http.Header
+	OnConnected    func(tv TradingView)
+	OnConnectError func(err error, tv TradingView)
+	OnDisconnected func(err error, tv TradingView)
+	Watching       map[string]TradingViewQuote
+	notifications  []*TradingViewNotifications
+	IsConnected    bool
+	sessionID      string
+	sendMutex      *sync.Mutex
+	recvMutex      *sync.Mutex
+}
+
+type TradingViewNotifications struct {
+	Symbol string
+	Action func(TradingViewQuote) bool
 }
 
 type TradingViewRequest struct {
@@ -53,18 +76,4 @@ type TradingViewQuote struct {
 	LivePrice            float64 `json:"rtc"`
 	LiveChange           float64 `json:"rch"`
 	LiveChangePercentage float64 `json:"rchp"`
-}
-
-type TradingViewEventTimescaleUpdateEnvelope struct {
-	Record TradingViewEventTimescaleUpdateSeries `json:"s1"`
-}
-
-type TradingViewEventTimescaleUpdateSeries struct {
-	Node string                                  `json:"node"`
-	Data []TradingViewEventTimescaleUpdateRecord `json:"s"`
-}
-
-type TradingViewEventTimescaleUpdateRecord struct {
-	Index  int       `json:"i"`
-	Values []float64 `json:"v"`
 }

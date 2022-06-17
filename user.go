@@ -69,7 +69,7 @@ func (u *User) Save() {
 
 func (u *User) CreatePosition(position_type string, symbol string, quantity int64, target float64, source *Command) {
 	user := u
-	watchlist.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
@@ -150,7 +150,7 @@ func (u *User) CreatePosition(position_type string, symbol string, quantity int6
 
 func (u *User) ClosePosition(position_type string, symbol string, quantity int64, basis float64, source *Command) {
 	user := u
-	watchlist.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
@@ -269,7 +269,7 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 		"target_price": order.CostBasis,
 	}).Info("Creating a new watch limit order job.")
 
-	watchlist.OnUpdate(order.Symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tradingview.OnUpdate(order.Symbol, func(quote TradingViewQuote) (shouldDelete bool) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{

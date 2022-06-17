@@ -115,7 +115,7 @@ func SlackMessageHandler(event *slackevents.MessageEvent) {
 			symbol := strings.ToUpper(symbols[i][1])
 			seen[symbol] = true
 
-			watchlist.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+			tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
 				if quote.Symbol != symbol {
 					slackapi.PostMessage(
 						event.Channel,

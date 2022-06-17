@@ -31,7 +31,7 @@ func main() {
 		ReadTimeout:  1 * time.Minute,
 	}
 
-	InitWatchList()
+	//InitWatchList()
 	tradingview.OnConnected = func(tv TradingView) {
 		Redis.ForEach(func(user User) {
 			source := Command{
