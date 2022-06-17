@@ -7,6 +7,8 @@ import (
 	"text/template"
 
 	"github.com/slack-go/slack"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	TVScanner "sublim.nl/stonkbot/tvscanner"
 )
 
@@ -51,7 +53,7 @@ func StockQuoteBlock(quote TradingViewQuote) slack.MsgOption {
 	}
 
 	if analysis, err := scanner.GetAnalysis("america", quote.Exchange, quote.Symbol, "1h"); err == nil {
-		recommendation := strings.Title(strings.ToLower(strings.ReplaceAll(analysis.Recommend.Summary, "_", " ")))
+		recommendation := cases.Title(language.Und, cases.NoLower).String(strings.ToLower(strings.ReplaceAll(analysis.Recommend.Summary, "_", " ")))
 		footer_items = append(footer_items, fmt.Sprintf("_1 Day Technical Analysis: *%s* (Buy: %d, Neutral: %d, Sell: %d)_", recommendation, analysis.BuyCount, analysis.NeutralCount, analysis.SellCount))
 	}
 
@@ -59,7 +61,7 @@ func StockQuoteBlock(quote TradingViewQuote) slack.MsgOption {
 	footer := new(bytes.Buffer)
 	t.Execute(footer, quote)
 
-	fields = append(fields, slack.NewContextBlock("context", slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("%s", footer), false, false)))
+	fields = append(fields, slack.NewContextBlock("context", slack.NewTextBlockObject(slack.MarkdownType, footer.String(), false, false)))
 
 	return slack.MsgOptionBlocks(fields...)
 }

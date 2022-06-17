@@ -110,7 +110,7 @@ func (tv *TradingView) Watch(symbol string) {
 			tv.SessionID,
 			symbol,
 			map[string][]string{
-				"flags": []string{
+				"flags": {
 					"force_permission",
 				},
 			},
@@ -141,7 +141,6 @@ func (tv *TradingView) Loop() {
 				),
 			)
 			panic("Lost connection; panic to restart")
-			return
 		}
 
 		tv.MessageHandler(string(message))
@@ -154,7 +153,7 @@ func (tv *TradingView) MessageHandler(message string) {
 
 	for i := range lines {
 		if lines[i] != "" {
-			if match, err := regexp.MatchString("^~h~[0-9]+$", lines[i]); match && err == nil {
+			if matched := re.MatchString(lines[i]); matched {
 				tv.SendSigned(lines[i])
 				continue
 			}
@@ -217,7 +216,7 @@ func ParseTradingViewEvent(line string) error {
 	switch event.Type {
 	case "qsd":
 		if len(event.RawData) != 2 {
-			return fmt.Errorf("Unrecognized QSD event message format.")
+			return fmt.Errorf("unrecognized QSD event message format")
 		}
 
 		envelope := &TradingViewEventQSDEnvelope{}
@@ -240,21 +239,19 @@ func ParseTradingViewEvent(line string) error {
 
 		err = json.Unmarshal([]byte(envelope.Data), &qsd)
 		if err != nil {
-			return fmt.Errorf("Error parsing quote data: %v", err)
+			return fmt.Errorf("error parsing quote data: %v", err)
 		}
 
 		log.Infof("QSD line %v", line)
 
 		if qsd.OriginalName != "" {
 			if _, ok := watchlist.Watching[qsd.OriginalName]; !ok {
-				fmt.Printf("Adding %s to watch list as alternate.\n", qsd.OriginalName)
 				tradingview.Watch(qsd.OriginalName)
 			}
 		}
 
 		if qsd.ProName != "" {
 			if _, ok := watchlist.Watching[qsd.ProName]; !ok {
-				fmt.Printf("Adding %s to watch list as alternate.\n", qsd.ProName)
 				tradingview.Watch(qsd.ProName)
 			}
 		}

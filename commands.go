@@ -42,7 +42,7 @@ func (c *Command) Say(msg string, formatting ...interface{}) {
 
 func (c *Command) GetArgAsInteger(position int) (value int64, err error) {
 	if len(c.Args)-1 < position {
-		return 0, fmt.Errorf("Missing arguments.")
+		return 0, fmt.Errorf("missing arguments")
 	}
 
 	if value, err = strconv.ParseInt(c.Args[position], 10, 32); err != nil {
@@ -57,7 +57,7 @@ func (c *Command) GetArgAsInteger(position int) (value int64, err error) {
 
 func (c *Command) GetArgAsString(position int) (value string, err error) {
 	if len(c.Args)-1 < position {
-		return "", fmt.Errorf("Missing arguments.")
+		return "", fmt.Errorf("missing arguments")
 	}
 
 	return c.Args[position], nil
@@ -65,7 +65,7 @@ func (c *Command) GetArgAsString(position int) (value string, err error) {
 
 func (c *Command) GetArgAsStockSymbol(position int) (symbol string, err error) {
 	if len(c.Args)-1 < position {
-		return "", fmt.Errorf("Missing arguments.")
+		return "", fmt.Errorf("missing arguments")
 	}
 
 	re := regexp.MustCompile(`^\$?([a-zA-Z]+)$`)
@@ -74,12 +74,12 @@ func (c *Command) GetArgAsStockSymbol(position int) (symbol string, err error) {
 		return strings.ToUpper(parsed[1]), nil
 	}
 
-	return "", fmt.Errorf("Unable to parse as Stock Symbol.")
+	return "", fmt.Errorf("unable to parse as stock symbol")
 }
 
 func (c *Command) GetArgAsFloat(position int) (value float64, err error) {
 	if len(c.Args)-1 < position {
-		return 0, fmt.Errorf("Missing arguments.")
+		return 0, fmt.Errorf("missing arguments")
 	}
 
 	if value, err = strconv.ParseFloat(c.Args[position], 64); err != nil {
@@ -331,7 +331,7 @@ func (c *Command) CommandSell() {
 	}
 
 	// Optional
-	basis, err = c.GetArgAsFloat(2)
+	basis, _ = c.GetArgAsFloat(2)
 
 	c.User.ClosePosition("long", symbol, quantity, basis, c)
 }
@@ -360,7 +360,7 @@ func (c *Command) CommandCover() {
 	}
 
 	// Optional
-	basis, err = c.GetArgAsFloat(2)
+	basis, _ = c.GetArgAsFloat(2)
 
 	c.User.ClosePosition("short", symbol, quantity, basis, c)
 }

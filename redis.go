@@ -107,14 +107,14 @@ func (r *RedisClient) GetAllUsers() (users []*User) {
 
 func (r *RedisClient) Ping() error {
 	if err := r.client.Ping(context.Background()).Err(); err != nil {
-		return fmt.Errorf("Unable to check Redis connection: %v", err)
+		return fmt.Errorf("unable to check Redis connection: %v", err)
 	}
 
 	return nil
 }
 
 func (r *RedisClient) Start() {
-	if r.started == false {
+	if !r.started {
 		r.started = true
 		for range r.quit {
 			close(r.quit)

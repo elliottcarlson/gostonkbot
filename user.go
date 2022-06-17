@@ -45,24 +45,23 @@ func GetUserByID(userID string) *User {
 	}
 }
 
-
 func (u *User) log(fields ...map[string]interface{}) *log.Entry {
-        output := log.WithFields(log.Fields{
-		"source": "user.go",
-		"user_id": u.UserID,
+	output := log.WithFields(log.Fields{
+		"source":    "user.go",
+		"user_id":   u.UserID,
 		"user_name": u.FullName,
-        })
+	})
 
-        if fields != nil {
-                output = output.WithFields(fields[0])
-        }
+	if fields != nil {
+		output = output.WithFields(fields[0])
+	}
 
-        return output
+	return output
 }
 
 func (u *User) Save() {
 	u.log(map[string]interface{}{
-		"funds": u.Funds,
+		"funds":      u.Funds,
 		"held_funds": u.HeldFunds,
 	}).Info("Saving user record.")
 	Redis.Set(u.UserID, u)
@@ -74,12 +73,12 @@ func (u *User) CreatePosition(position_type string, symbol string, quantity int6
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
-			"method": "CreatePosition",
-			"type": position_type,
-			"symbol": symbol,
-			"quantity": quantity,
+			"method":       "CreatePosition",
+			"type":         position_type,
+			"symbol":       symbol,
+			"quantity":     quantity,
 			"target_price": target,
-			"last_price": quote.LastPrice,
+			"last_price":   quote.LastPrice,
 		})
 
 		cost_basis := quote.LastPrice
@@ -155,11 +154,11 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
-			"method": "ClosePosition",
-			"type": position_type,
-			"symbol": symbol,
-			"quantity": quantity,
-			"basis": basis,
+			"method":     "ClosePosition",
+			"type":       position_type,
+			"symbol":     symbol,
+			"quantity":   quantity,
+			"basis":      basis,
 			"last_price": quote.LastPrice,
 		})
 
@@ -194,14 +193,14 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 						funds = funds + value
 						log.WithFields(map[string]interface{}{
 							"gains": (value - proceeds),
-							"value": + value,
+							"value": +value,
 						}).Info("Closing long position.")
 					case "short":
 						gains = gains + (proceeds - value)
 						funds = funds + proceeds + gains
 						log.WithFields(map[string]interface{}{
 							"gains": (proceeds - value),
-							"value": + (proceeds + gains),
+							"value": +(proceeds + gains),
 						}).Info("Closing short position.")
 					case "limit_buy":
 						refund := float64(to_sell) * asset.CostBasis
@@ -263,10 +262,10 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 	user := u
 	user.log(map[string]interface{}{
-		"method": "WatchLimitOrder:OnUpdate",
-		"type": order.Type,
-		"symbol": order.Symbol,
-		"quantity": order.Quantity,
+		"method":       "WatchLimitOrder:OnUpdate",
+		"type":         order.Type,
+		"symbol":       order.Symbol,
+		"quantity":     order.Quantity,
 		"target_price": order.CostBasis,
 	}).Info("Creating a new watch limit order job.")
 
@@ -274,12 +273,12 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
-			"method": "WatchLimitOrder:OnUpdate",
-			"type": order.Type,
-			"symbol": order.Symbol,
-			"quantity": order.Quantity,
+			"method":       "WatchLimitOrder:OnUpdate",
+			"type":         order.Type,
+			"symbol":       order.Symbol,
+			"quantity":     order.Quantity,
 			"target_price": order.CostBasis,
-			"last_price": quote.LastPrice,
+			"last_price":   quote.LastPrice,
 		})
 
 		cost_basis := quote.LastPrice
@@ -302,7 +301,6 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 						source.Say("<@%s>'s limit buy has been completed.", user.UserID)
 						return true
 					}
-					break
 				case "limit_sell":
 					if cost_basis >= order.CostBasis {
 						log.Info("Limit sell has been met; closing original position, and creating long.")
@@ -311,7 +309,6 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 						source.Say("<@%s>'s limit sell has been completed.", user.UserID)
 						return true
 					}
-					break
 				case "limit_cover":
 					if cost_basis <= order.CostBasis {
 						log.Info("Limit cover has been met; closing original position, and creating long.")
@@ -320,13 +317,12 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 						source.Say("<@%s>'s limit cover has been completed.", user.UserID)
 						return true
 					}
-					break
 				}
 			}
 		}
 
 		log.WithFields(map[string]interface{}{
-			"asset_found": asset_found,
+			"asset_found":    asset_found,
 			"deleting_watch": !asset_found,
 		}).Info("No criteria met to action on watch order.")
 
