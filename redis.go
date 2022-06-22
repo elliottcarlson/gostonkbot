@@ -11,6 +11,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type RedisClient struct {
+	client  *redis.Client
+	quit    chan struct{}
+	started bool
+	mutex   *sync.Mutex
+	prefix  string
+}
+
+type RedisConfig struct {
+	RedisURL string
+	Prefix   string
+}
+
 var Redis *RedisClient
 
 func InitRedis(config RedisConfig) {

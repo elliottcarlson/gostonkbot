@@ -14,6 +14,7 @@ import (
 
 	//	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
+	"github.com/elliottcarlson/tradingview"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )
@@ -190,7 +191,7 @@ func (c *Command) CommandPortfolio() {
 
 	for i := range user.Portfolio {
 		asset := user.Portfolio[i]
-		quote, ok := tradingview.GetCurrent(asset.Symbol)
+		quote, ok := tv.GetLastQuote(asset.Symbol)
 		if !ok {
 			c.Say("Unable to include your asset of %s. This might be a temporary glitch. Please try again later.", asset.Symbol)
 			continue
@@ -265,7 +266,7 @@ func (c *Command) CommandBuy() {
 
 		funds := c.User.Funds
 		fmt.Println("???")
-		tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+		tv.GetQuote(symbol, func(quote tradingview.Quote) {
 			cost_basis := quote.LastPrice
 			if quote.LivePrice != 0.00 && (quote.CurrentSession == "pre_market" || quote.CurrentSession == "post_market") {
 				cost_basis = quote.LivePrice
@@ -276,7 +277,6 @@ func (c *Command) CommandBuy() {
 			fmt.Printf("Funds: %f, Cost: %f, quantity: %d\n", funds, cost_basis, quantity)
 
 			c.User.CreatePosition("long", symbol, quantity, 0.0, c)
-			return true
 		})
 		return
 	}
@@ -403,7 +403,7 @@ func (c *Command) CommandOrders() {
 			continue
 		}
 
-		quote, ok := tradingview.GetCurrent(asset.Symbol)
+		quote, ok := tv.GetLastQuote(asset.Symbol)
 		if !ok {
 			c.Say("Unable to include your asset of %s. This might be a temporary glitch. Please try again later.", asset.Symbol)
 			continue
@@ -585,7 +585,7 @@ func (c *Command) CommandLeaderboard() {
 		networth := 0.0
 		for j := range user.Portfolio {
 			asset := user.Portfolio[j]
-			if quote, ok := tradingview.GetCurrent(asset.Symbol); ok {
+			if quote, ok := tv.GetLastQuote(asset.Symbol); ok {
 				networth = networth + (float64(asset.Quantity) * quote.LastPrice)
 			}
 		}

@@ -1,20 +1,24 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"math"
 	"strings"
 
+	"github.com/elliottcarlson/tradingview"
 	log "github.com/sirupsen/logrus"
 )
 
 var DEFAULT_WALLET_VALUE = float64(1000000)
 
 type User struct {
-	UserID    string
-	FullName  string
-	Funds     float64
-	HeldFunds float64
-	Portfolio []*Asset
+	UserID    string   `json:"slackid"`
+	FullName  string   `json:"fullname"`
+	Funds     float64  `json:"funds"`
+	HeldFunds float64  `json:"heldfunds"`
+	Portfolio []*Asset `json:"portfolio"`
+	Token     string   `json:"-"`
 }
 
 type Asset struct {
@@ -26,11 +30,6 @@ type Asset struct {
 
 func GetUserByID(userID string) *User {
 	if user, err := Redis.Get(userID); err == nil {
-		if user.FullName == "" {
-			slackuser, _ := slackapi.GetUserInfo(userID)
-			user.FullName = slackuser.Profile.RealName
-			user.Save()
-		}
 		return user
 	} else {
 		slackuser, _ := slackapi.GetUserInfo(userID)
@@ -38,6 +37,7 @@ func GetUserByID(userID string) *User {
 			UserID:   userID,
 			FullName: slackuser.Profile.RealName,
 			Funds:    DEFAULT_WALLET_VALUE,
+			Token:    GenerateSecureToken(32),
 		}
 
 		Redis.Set(userID, user)
@@ -45,9 +45,28 @@ func GetUserByID(userID string) *User {
 	}
 }
 
+func GetUserByToken(token string) (user *User, found bool) {
+	users := Redis.GetAllUsers()
+
+	for i := range users {
+		if users[i].Token == token {
+			return users[i], true
+		}
+	}
+
+	return &User{}, false
+}
+
+func GenerateSecureToken(length int) string {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
+}
+
 func (u *User) log(fields ...map[string]interface{}) *log.Entry {
 	output := log.WithFields(log.Fields{
-		"source":    "user.go",
 		"user_id":   u.UserID,
 		"user_name": u.FullName,
 	})
@@ -59,17 +78,33 @@ func (u *User) log(fields ...map[string]interface{}) *log.Entry {
 	return output
 }
 
+func (u *User) NetWorth() (networth float64) {
+	for j := range u.Portfolio {
+		asset := u.Portfolio[j]
+		if quote, ok := tv.GetLastQuote(asset.Symbol); ok {
+			networth = networth + (float64(asset.Quantity) * quote.LastPrice)
+		}
+	}
+
+	return networth + u.Funds
+}
+
 func (u *User) Save() {
 	u.log(map[string]interface{}{
 		"funds":      u.Funds,
 		"held_funds": u.HeldFunds,
-	}).Info("Saving user record.")
+	}).Debug("Saving user record.")
+
 	Redis.Set(u.UserID, u)
 }
 
-func (u *User) CreatePosition(position_type string, symbol string, quantity int64, target float64, source *Command) {
+type Source interface {
+	Say(msg string, formatting ...interface{})
+}
+
+func (u *User) CreatePosition(position_type string, symbol string, quantity int64, target float64, source Source) {
 	user := u
-	tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tv.GetQuote(symbol, func(quote tradingview.Quote) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
@@ -91,8 +126,7 @@ func (u *User) CreatePosition(position_type string, symbol string, quantity int6
 
 		if quote.Symbol != symbol {
 			log.Info("Symbol not found.")
-			source.Say("<@s> I was unable to find that stock; wanna try that again?")
-			return true
+			source.Say("<@%s> I was unable to find that stock; wanna try that again?", user.UserID)
 		}
 
 		if position_type != "limit_sell" {
@@ -101,7 +135,6 @@ func (u *User) CreatePosition(position_type string, symbol string, quantity int6
 					"cost": cost_basis * float64(quantity),
 				}).Info("Insufficient funds.")
 				source.Say("<@%s>, you don't have enough funds to cover this trade. You have $%.2f available, and at most could do %d shares.", user.UserID, user.Funds, int(math.Floor(user.Funds/cost_basis)))
-				return true
 			}
 		}
 
@@ -144,13 +177,12 @@ func (u *User) CreatePosition(position_type string, symbol string, quantity int6
 		user.Save()
 
 		source.Say("<@%s> %s %d shares of %s at $%.2f, totalling $%.2f. They have $%.2f funds remaining.", user.UserID, action, quantity, symbol, cost_basis, cost_basis*float64(quantity), user.Funds)
-		return true
 	})
 }
 
-func (u *User) ClosePosition(position_type string, symbol string, quantity int64, basis float64, source *Command) {
+func (u *User) ClosePosition(position_type string, symbol string, quantity int64, basis float64, source Source) {
 	user := u
-	tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tv.GetQuote(symbol, func(quote tradingview.Quote) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{
@@ -165,7 +197,7 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 		if quote.Symbol != symbol {
 			log.Info("Symbol not found.")
 			source.Say("<@s> I was unable to find that stock; wanna try that again?")
-			return true
+			return
 		}
 
 		cost_basis := quote.LastPrice
@@ -233,7 +265,7 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 
 		if sold == 0 {
 			source.Say("<@%s>, you don't have those shares, are you trying to pull something?", user.UserID)
-			return true
+			return
 		}
 
 		user.Funds = user.Funds + funds
@@ -247,19 +279,19 @@ func (u *User) ClosePosition(position_type string, symbol string, quantity int64
 		case "short":
 			description = " covered"
 		case "limit_buy":
-			return true
+			return
 		case "limit_sell":
-			return true
+			return
 		case "limit_cover":
-			return true
+			return
 		}
 
 		source.Say("<@%s>%s %d shares of %s at $%.2f, totalling $%.2f, netting them $%.2f. They have $%.2f funds remaining.", user.UserID, description, sold, symbol, cost_basis, funds, gains, user.Funds)
-		return true
+		return
 	})
 }
 
-func (u *User) WatchLimitOrder(order *Asset, source *Command) {
+func (u *User) WatchLimitOrder(order *Asset, source Source) {
 	user := u
 	user.log(map[string]interface{}{
 		"method":       "WatchLimitOrder:OnUpdate",
@@ -269,7 +301,7 @@ func (u *User) WatchLimitOrder(order *Asset, source *Command) {
 		"target_price": order.CostBasis,
 	}).Info("Creating a new watch limit order job.")
 
-	tradingview.OnUpdate(order.Symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+	tv.OnUpdate(order.Symbol, func(quote tradingview.Quote) (shouldDelete bool) {
 		user = GetUserByID(user.UserID)
 
 		log := user.log(map[string]interface{}{

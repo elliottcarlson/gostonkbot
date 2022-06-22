@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/elliottcarlson/tradingview"
 	"github.com/iancoleman/strcase"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -18,14 +18,6 @@ import (
 
 var slackapi = slack.New(os.Getenv("SLACK_TOKEN"))
 var signingSecret = os.Getenv("SLACK_SIGNING_SECRET")
-
-func SlackEventRouter() *mux.Router {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/slack/events", SlackEventHandler)
-
-	return router
-}
 
 func SlackEventHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
@@ -115,7 +107,7 @@ func SlackMessageHandler(event *slackevents.MessageEvent) {
 			symbol := strings.ToUpper(symbols[i][1])
 			seen[symbol] = true
 
-			tradingview.GetQuote(symbol, func(quote TradingViewQuote) (shouldDelete bool) {
+			tv.GetQuote(symbol, func(quote tradingview.Quote) {
 				if quote.Symbol != symbol {
 					slackapi.PostMessage(
 						event.Channel,
@@ -132,8 +124,6 @@ func SlackMessageHandler(event *slackevents.MessageEvent) {
 						StockQuoteBlock(quote),
 					)
 				}
-
-				return true
 			})
 		}
 	}

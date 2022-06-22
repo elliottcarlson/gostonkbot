@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/elliottcarlson/tradingview"
 	"github.com/slack-go/slack"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -14,7 +15,7 @@ import (
 
 var scanner = TVScanner.New()
 
-func StockQuoteBlock(quote TradingViewQuote) slack.MsgOption {
+func StockQuoteBlock(quote tradingview.Quote) slack.MsgOption {
 	emoji := ":green_up:"
 	live_emoji := ":green_up:"
 	if quote.Change < 0 {

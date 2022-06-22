@@ -5,12 +5,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/elliottcarlson/tradingview"
 	_ "github.com/joho/godotenv/autoload"
 	log "github.com/sirupsen/logrus"
 	"github.com/slack-go/slack/slackevents"
 )
 
-var tradingview = NewTradingView()
+var tv = tradingview.NewClient()
 
 func main() {
 	log.SetFormatter(&log.TextFormatter{
@@ -25,14 +26,13 @@ func main() {
 	go Redis.Start()
 
 	slack := &http.Server{
-		Handler:      SlackEventRouter(),
+		Handler:      Router(),
 		Addr:         os.Getenv("HTTP_SERVER_BIND"),
 		WriteTimeout: 1 * time.Minute,
 		ReadTimeout:  1 * time.Minute,
 	}
 
-	//InitWatchList()
-	tradingview.OnConnected = func(tv TradingView) {
+	tv.OnConnected = func(tv tradingview.TradingView) {
 		Redis.ForEach(func(user User) {
 			source := Command{
 				Event: &slackevents.MessageEvent{
@@ -50,7 +50,7 @@ func main() {
 			}
 		})
 	}
-	go tradingview.Connect()
+	go tv.ConnectAndStart()
 
 	log.Fatal(slack.ListenAndServe())
 }
